@@ -1,6 +1,8 @@
 """
-Reusable RAG agent - the core agent logic in one place so the API
-(and anything else) can import and use it without duplicating code.
+Reusable RAG agent (deploy-ready version).
+
+Uses FastEmbed for embeddings instead of sentence-transformers/PyTorch,
+which makes the app much lighter and suitable for free-tier deployment.
 """
 
 import os
@@ -8,16 +10,29 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
 load_dotenv()
 
 # ----------------------------------------------------------------------
-# Knowledge base setup
+# Embedding model via FastEmbed (lightweight, no PyTorch needed).
+# BAAI/bge-small-en-v1.5 outputs 384-dim vectors, same as before,
+# so our Qdrant collection config stays compatible.
 # ----------------------------------------------------------------------
-embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+
+
+def embed(text: str):
+    """Return the embedding vector (list of floats) for a piece of text."""
+    # FastEmbed returns a generator; we take the first (and only) result
+    return list(embed_model.embed([text]))[0].tolist()
+
+
+# ----------------------------------------------------------------------
+# Qdrant connection (URL comes from env so it works locally AND in cloud)
+# ----------------------------------------------------------------------
 qdrant = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
 COLLECTION = "production_kb"
 
@@ -46,8 +61,7 @@ def _setup_knowledge_base():
     qdrant.upsert(
         collection_name=COLLECTION,
         points=[
-            PointStruct(id=i, vector=embed_model.encode(t).tolist(),
-                        payload={"text": t})
+            PointStruct(id=i, vector=embed(t), payload={"text": t})
             for i, t in enumerate(knowledge)
         ],
     )
@@ -60,9 +74,8 @@ def _setup_knowledge_base():
 def search_docs(query: str) -> str:
     """Search TechCorp's knowledge base for company information such as
     product features, pricing, trial, integrations, support, or history."""
-    qv = embed_model.encode(query).tolist()
     results = qdrant.query_points(
-        collection_name=COLLECTION, query=qv, limit=3
+        collection_name=COLLECTION, query=embed(query), limit=3
     ).points
     return "\n".join(f"- {r.payload['text']}" for r in results)
 
@@ -80,16 +93,13 @@ _setup_knowledge_base()
 _llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0)
 _agent = create_react_agent(_llm, [search_docs, multiply])
 
-# Input guardrail config
+# Guardrail config
 MAX_INPUT_LENGTH = 1000
 MAX_STEPS = 6
 
 
 def ask_agent(question: str) -> str:
-    """
-    Main entry point: takes a question, applies guardrails, runs the
-    agent, and returns the answer string. Used by the API.
-    """
+    """Apply guardrails, run the agent, return the answer. Used by the API."""
     # Guardrail 1: validate input
     if not question or not question.strip():
         return "Please ask a valid question."
@@ -104,7 +114,7 @@ def ask_agent(question: str) -> str:
         )
         answer = result["messages"][-1].content
     except Exception:
-        return "Sorry, I couldn't process that. Please try rephrasing."
+        return "I don't have enough information to answer that confidently."
 
     # Guardrail 3: output check
     if not answer or not answer.strip():
