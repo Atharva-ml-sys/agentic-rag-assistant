@@ -7,11 +7,19 @@ Endpoints:
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from shared.rag_agent import ask_agent
 
 # Create the FastAPI application
 app = FastAPI(title="Agentic RAG Assistant API")
+# Allow the browser-based frontend to call this API (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # in production, restrict to your domain
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ----------------------------------------------------------------------

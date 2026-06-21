@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic RAG Assistant</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .header h1 { font-size: 20px; color: #f8fafc; }
+    .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+
+    .chat-box {
+      width: 100%;
+      max-width: 700px;
+      flex: 1;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg {
+      padding: 10px 14px;
+      border-radius: 10px;
+      max-width: 80%;
+      line-height: 1.4;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    .user {
+      background: #3b82f6;
+      color: white;
+      align-self: flex-end;
+    }
+    .bot {
+      background: #334155;
+      color: #e2e8f0;
+      align-self: flex-start;
+    }
+    .input-row {
+      width: 100%;
+      max-width: 700px;
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 14px;
+      outline: none;
+    }
+    button {
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { background: #475569; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Agentic RAG Assistant</h1>
+    <p>Ask about TechCorp & CloudDesk</p>
+  </div>
+
+  <div class="chat-box" id="chatBox">
+    <div class="msg bot">Hi! Ask me anything about TechCorp or CloudDesk.</div>
+  </div>
+
+  <div class="input-row">
+    <input
+      id="userInput"
+      type="text"
+      placeholder="Type your question..."
+      onkeydown="if(event.key==='Enter') sendMessage()"
+    />
+    <button id="sendBtn" onclick="sendMessage()">Send</button>
+  </div>
+
+  <script>
+    const API_URL = "http://127.0.0.1:8000/ask";
+    const chatBox = document.getElementById("chatBox");
+    const input = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+
+    // Add a message bubble to the chat
+    function addMessage(text, sender) {
+      const div = document.createElement("div");
+      div.className = "msg " + sender;
+      div.textContent = text;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      return div;
+    }
+
+    async function sendMessage() {
+      const question = input.value.trim();
+      if (!question) return;
+
+      // show the user's message
+      addMessage(question, "user");
+      input.value = "";
+
+      // show a temporary "thinking..." bubble
+      const thinking = addMessage("Thinking...", "bot");
+      sendBtn.disabled = true;
+
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: question }),
+        });
+        const data = await response.json();
+        // replace "Thinking..." with the real answer
+        thinking.textContent = data.answer;
+      } catch (err) {
+        thinking.textContent = "Error: could not reach the server.";
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+  </script>
+</body>
+</html>
