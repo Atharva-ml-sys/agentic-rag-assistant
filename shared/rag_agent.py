@@ -18,7 +18,7 @@ load_dotenv()
 # Knowledge base setup
 # ----------------------------------------------------------------------
 embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-qdrant = QdrantClient(url="http://localhost:6333")
+qdrant = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
 COLLECTION = "production_kb"
 
 knowledge = [
